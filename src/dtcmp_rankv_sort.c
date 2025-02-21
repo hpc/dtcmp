@@ -202,20 +202,31 @@ static int detect_edges(
 
     /* if we have a left partner, merge its data with our right-going data */
     if (left_rank != MPI_PROC_NULL) {
-      if (true_extent > 0 && num > 0 && !made_left_comparison && recv_left_ints[DETECT_VALID]) {
-        /* compare our leftmost value with the value we receive from the left,
-         * if our value is different, mark it as the start of a new group */
-        int result = dtcmp_op_eval(recv_left_buf + 2 * sizeof(int), buf_first, cmp);
-        if (result != 0) {
-          first_in_group[0] = 1;
-        } else {
-          first_in_group[0] = 0;
+
+      if (recv_left_ints[DETECT_VALID]) {
+        /* if we don't have valid value but left partner has, use its item in
+         * our right-going data */
+        if (!send_right_ints[DETECT_VALID]) {
+          send_right_ints[DETECT_VALID] = 1;
+          DTCMP_Memcpy(send_right_buf + 2 * sizeof(int), 1, item,
+                       recv_left_buf + 2 * sizeof(int), 1, item);
         }
 
-        /* after we make this comparison, we don't need to again,
-         * we just need to check with the first rank to our left
-         * that has a valid value */
-        made_left_comparison = 1;
+        if (true_extent > 0 && num > 0 && !made_left_comparison) {
+          /* compare our leftmost value with the value we receive from the left,
+           * if our value is different, mark it as the start of a new group */
+          int result = dtcmp_op_eval(recv_left_buf + 2 * sizeof(int), buf_first, cmp);
+          if (result != 0) {
+            first_in_group[0] = 1;
+          } else {
+            first_in_group[0] = 0;
+          }
+
+          /* after we make this comparison, we don't need to again,
+           * we just need to check with the first rank to our left
+           * that has a valid value */
+          made_left_comparison = 1;
+        }
       }
 
       /* get the next rank to send to on our left */
@@ -224,18 +235,28 @@ static int detect_edges(
 
     /* if we have a right partner, merge its data with our left-going data */
     if (right_rank != MPI_PROC_NULL) {
-      if (true_extent > 0 && num > 0 && !made_right_comparison && recv_right_ints[DETECT_VALID]) {
-        /* compare our rightmost value with the value we receive from the right,
-         * if our value is different, mark it as the end of a group */
-        int result = dtcmp_op_eval(recv_right_buf + 2 * sizeof(int), buf_last, cmp);
-        if (result != 0) {
-          last_in_group[num-1] = 1;
-        } else {
-          last_in_group[num-1] = 0;
-        }
-        made_right_comparison = 1;
-      }
 
+      if(recv_right_ints[DETECT_VALID]) {
+        /* if we don't have valid value but right partner has, use its item in
+         * our left-going data */
+        if (!send_left_ints[DETECT_VALID]) {
+          send_left_ints[DETECT_VALID] = 1;
+          DTCMP_Memcpy(send_left_buf + 2 * sizeof(int), 1, item,
+                       recv_right_buf + 2 * sizeof(int), 1, item);
+        }
+
+        if (true_extent > 0 && num > 0 && !made_right_comparison) {
+          /* compare our rightmost value with the value we receive from the right,
+          * if our value is different, mark it as the end of a group */
+          int result = dtcmp_op_eval(recv_right_buf + 2 * sizeof(int), buf_last, cmp);
+          if (result != 0) {
+            last_in_group[num-1] = 1;
+          } else {
+            last_in_group[num-1] = 0;
+          }
+          made_right_comparison = 1;
+        }
+      }
       /* get the next rank to send to on our right */
       right_rank = recv_right_ints[DETECT_NEXT];
     }
